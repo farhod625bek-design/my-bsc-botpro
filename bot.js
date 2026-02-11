@@ -1,84 +1,123 @@
-import { ethers } from 'ethers';
-import dotenv from 'dotenv';
+from web3 import Web3
+from web3.middleware import geth_poa_middleware
+import time
+import os
+from dotenv import load_dotenv
 
-// 1. Muhitni yuklash
-dotenv.config();
+# .env yuklash
+load_dotenv()
 
-const PRIVATE_KEY = process.env.PRIVATE_KEY;
-const RPC_URL = process.env.PRIVATE_RPC_URL || "https://polygon-rpc.com";
+# ==================== SOZLAMALAR ====================
+RPC_URL = 'https://polygon-rpc.com'          # Polygon Mainnet (tez va ishonchli)
+CHAIN_ID = 137                               # Polygon chain ID
+MY_ADDRESS = os.getenv('MY_ADDRESS')
+PRIVATE_KEY = os.getenv('PRIVATE_KEY')
 
-// 2. Blokcheyn ulanishi
-const provider = new ethers.JsonRpcProvider(RPC_URL);
-const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
+CONTRACT_ADDRESS = '0xddaAd340b0f1Ef65169Ae5E41A8b10776a75482d'  # Siz so'ragan manzil
 
-// Kontrakt va hamyon manzillari
-const CONTRACT_ADDRESS = "0xddaAd340b0f1Ef65169Ae5E41A8b10776a75482d"; // Siz bergan manzil o'rnatildi
-const MY_ADDRESS = "0xFBd3c01e589c1A85e4c77Bb84a2605f774E058ac";
-
-// Tokenlar (Polygon Mainnet)
-const USDC = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359";
-const WETH = "0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619";
-
-// Birja Routerlari
-const QUICK_ROUTER = "0xa5E0829CaCEd8fFDD03942104615C1a7f99ee7ce";
-const SUSHI_ROUTER = "0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506";
-
-// 3. Kontrakt ABI
-const ABI = [
-    "function executeArbitrage(address tokenA, address tokenB, uint256 amount, uint256 minProfit, address router1, address router2)"
-];
-
-const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, wallet);
-
-async function startInvisibleHunt() {
-    if (!PRIVATE_KEY) {
-        console.log("❌ Xato: .env faylida PRIVATE_KEY topilmadi!");
-        return;
+# ABI — muhim! Remixdan olingan ABI ni shu yerga qo'ying
+# Agar sizda WhaleHunterV10 ABI bo'lsa — uni nusxalab qo'ying
+# Quyidagi misol sizning oldingi kodingizga mos
+ABI = [
+    {
+        "inputs": [
+            {"internalType": "address", "name": "_target", "type": "address"},
+            {"internalType": "uint256", "name": "_borrowAmount", "type": "uint256"},
+            {"internalType": "address[]", "name": "_tokenPath", "type": "address[]"},
+            {"internalType": "address[]", "name": "_routerPath", "type": "address[]"}
+        ],
+        "name": "executeStrike",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
     }
+    # Agar boshqa funksiyalar bo'lsa — qo'shing
+]
 
-    console.log(`🕵️‍♂️ 'Invisible' rejim yoqildi. RPC: ${RPC_URL}`);
-    console.log(`🚀 Raketa tayyor: ${CONTRACT_ADDRESS}`);
+# Polygon tokenlari (USDC 6 decimal, WETH 18 decimal)
+USDC = '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174'
+WETH = '0x7ceB23fD6bC0adD59E62ac25578270cFf1b9f619'
 
-    // Savdo miqdori: 10,000 USDC Flash Loan (USDC 6 ta nolga ega)
-    const loanAmount = ethers.parseUnits("10000", 6);
-    // Minimal foyda: 5 USDC
-    const minProfit = ethers.parseUnits("5", 6);
+QUICKSWAP_ROUTER = '0xa5E0829CaCEd8fFDD4De3c53AfeD7d1AebA5c8d9'   # QuickSwap V2
+SUSHISWAP_ROUTER = '0x1b02dA8Cb0d097eB8D57A175b88c7D8b47997506'   # SushiSwap
 
-    while (true) {
-        try {
-            console.log("🔄 Imkoniyat qidirilmoqda...");
+# Web3 ulanish
+w3 = Web3(Web3.HTTPProvider(RPC_URL))
+w3.middleware_onion.inject(geth_poa_middleware, layer=0)  # Polygon uchun kerak
 
-            // Tranzaksiyani yuborish
-            const tx = await contract.executeArbitrage(
-                USDC, WETH, loanAmount, minProfit, QUICK_ROUTER, SUSHI_ROUTER,
-                {
-                    gasLimit: 1800000,
-                    maxFeePerGas: ethers.parseUnits('350', 'gwei'),
-                    maxPriorityFeePerGas: ethers.parseUnits('50', 'gwei')
-                }
-            );
+if not w3.is_connected():
+    raise Exception("RPC ga ulanib bo'lmadi! Internetni tekshiring.")
 
-            console.log(`✅ Raketa ko'rinmas yo'lakdan uchdi! Hash: ${tx.hash}`);
+contract = w3.eth.contract(address=CONTRACT_ADDRESS, abi=ABI)
 
-            // Natijani kutish
-            const receipt = await tx.wait();
+# ==================== FUNKSİYALAR ====================
+def build_and_send_tx(function_call, gas_limit=800000, gas_multiplier=1.3):
+    if not PRIVATE_KEY:
+        raise ValueError("PRIVATE_KEY .env da yo'q! Qo'shing.")
 
-            if (receipt.status === 1) {
-                console.log("💰 G'ALABA! Foyda hamyoningizga tushdi.");
-            } else {
-                console.log("⚠️ Revert: Bozor o'zgarib qoldi yoki foyda yetarli bo'lmadi.");
-            }
+    gas_price = int(w3.eth.gas_price * gas_multiplier)
+    nonce = w3.eth.get_transaction_count(MY_ADDRESS)
 
-        } catch (error) {
-            if (error.message.includes("insufficient funds")) {
-                console.log("❌ Xato: Hamyonda POL (gaz) yetarli emas!");
-            } else {
-                console.log(`⏳ Bozor kutilmoqda...`);
-            }
-            // 4 soniya kutish
-            await new Promise(resolve => setTimeout(resolve, 4000));
-        }
-    }
-}
+    tx = function_call.build_transaction({
+        'from': MY_ADDRESS,
+        'nonce': nonce,
+        'gas': gas_limit,
+        'gasPrice': gas_price,
+        'chainId': CHAIN_ID
+    })
 
-startInvisibleHunt();
+    signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
+    tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+
+    print(f"✅ Tranzaksiya yuborildi: {w3.to_hex(tx_hash)}")
+    return tx_hash
+
+def wait_tx_receipt(tx_hash, timeout=180):
+    start = time.time()
+    while time.time() - start < timeout:
+        receipt = w3.eth.get_transaction_receipt(tx_hash)
+        if receipt:
+            if receipt.status == 1:
+                print("🎉 Muvaffaqiyat! Tranzaksiya tasdiqlandi.")
+                print(f"Gaz ishlatildi: {receipt.gasUsed}")
+                return receipt
+            else:
+                print("❌ Revert bo'ldi (xato). Kontrakt loglarini tekshiring.")
+                return None
+        time.sleep(4)
+    raise TimeoutError("Tranzaksiya tasdiqlanmadi!")
+
+def run_attack(
+    borrow_amount=50000 * 10**6,  # 50,000 USDC
+    token_path=[USDC, WETH, USDC],
+    router_path=[QUICKSWAP_ROUTER, SUSHISWAP_ROUTER]
+):
+    print(f"⚡️ Attack boshlanmoqda: {borrow_amount / 10**6} USDC bilan")
+
+    try:
+        tx_call = contract.functions.executeStrike(
+            token_path[0],          # borrow token
+            borrow_amount,
+            token_path,
+            router_path
+        )
+
+        tx_hash = build_and_send_tx(tx_call)
+        receipt = wait_tx_receipt(tx_hash)
+
+        if receipt:
+            print("Foyda yoki xato loglari kontrakt ichida bo'ladi — Polygonscan da tekshiring.")
+    except Exception as e:
+        print(f"Xato: {str(e)}")
+        print("Sabablar: Noto'g'ri ABI, yetarli balans yo'q, kontrakt funksiyasi mos emas yoki revert.")
+# ==================== ISHGA TUSHIRISH ====================
+if name == "main":
+    if not MY_ADDRESS or not PRIVATE_KEY:
+        print("Xato: .env da MY_ADDRESS yoki PRIVATE_KEY yo'q!")
+    else:
+        try:
+            run_attack()
+        except KeyboardInterrupt:
+            print("\nBot to'xtatildi.")
+        except Exception as e:
+            print(f"Umumiy xato: {e}")

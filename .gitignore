@@ -1,0 +1,22 @@
+# Maxfiy fayllar — token va kalitlar
+.env
+.env.local
+.env.*
+
+# Node.js paketlari va vaqtinchalik fayllar
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build va dist
+dist/
+build/
+
+# Editor/IDE fayllari
+.vscode/
+.idea/
+
+# Windows/Mac fayllari
+Thumbs.db
+.DS_Store

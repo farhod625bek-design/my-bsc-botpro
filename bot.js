@@ -12,7 +12,7 @@ const provider = new ethers.JsonRpcProvider(RPC_URL);
 const wallet = new ethers.Wallet(PRIVATE_KEY, provider);
 
 // Kontrakt va hamyon manzillari
-const CONTRACT_ADDRESS = "0xf463088E8f697573E77b638ca6E824196EDa21fd";
+const CONTRACT_ADDRESS = "0xddaAd340b0f1Ef65169Ae5E41A8b10776a75482d"; // Siz bergan manzil o'rnatildi
 const MY_ADDRESS = "0xFBd3c01e589c1A85e4c77Bb84a2605f774E058ac";
 
 // Tokenlar (Polygon Mainnet)

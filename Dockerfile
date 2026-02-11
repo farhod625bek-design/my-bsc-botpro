@@ -1,16 +1,14 @@
-FROM node:18
+FROM node:18-slim
 
-# Ishchi katalogni yaratish
 WORKDIR /app
 
-# Package fayllarini nusxalash
+# Avval package fayllarini ko'chiramiz
 COPY package*.json ./
 
-# Kutubxonalarni o'rnatish
+# Kutubxonalarni o'rnatamiz
 RUN npm install
 
-# Bot kodini nusxalash
+# Keyin qolgan hamma faylni ko'chiramiz
 COPY . .
 
-# Botni ishga tushirish
 CMD ["node", "bot.js"]
